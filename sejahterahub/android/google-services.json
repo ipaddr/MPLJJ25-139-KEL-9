@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "323789076279",
+    "project_id": "sejahterahub-49a8e",
+    "storage_bucket": "sejahterahub-49a8e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:323789076279:android:773c6f62925656fb690cb2",
+        "android_client_info": {
+          "package_name": "com.example.sejahterahub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAVocpYQuI3xN_9Icf_2pdo5jgxU0UkQ-o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
