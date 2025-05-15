@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:sejahterahub/views/splashscreeen.dart';
+import 'package:sejahterahub/views/splashscreen.dart';
 import 'package:sejahterahub/views/login_views.dart';
+import 'package:sejahterahub/views/home_screen.dart';
+import 'package:sejahterahub/views/register_views.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,8 +24,8 @@ class MyApp extends StatelessWidget {
       routes: {
         '/': (context) => const SplashScreen(),
         '/login': (context) => const LoginScreen(),
-        // '/register': (context) => const RegisterScreen(),
-        // '/home': (context) => const HomeScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/home': (context) => const HomeScreen(),
       },
     );
   }
