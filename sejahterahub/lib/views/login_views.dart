@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -9,37 +8,26 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
-  final _auth = FirebaseAuth.instance;
 
-  Future<void> _login() async {
+  void _login() {
     setState(() => _isLoading = true);
-    try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
 
-      if (userCredential.user != null && !userCredential.user!.emailVerified) {
-        await _auth.signOut();
-        _showMessage("Email belum diverifikasi. Cek inbox atau spam.");
-        setState(() => _isLoading = false);
-        return;
+    Future.delayed(const Duration(seconds: 1), () {
+      final username = _usernameController.text.trim();
+      final password = _passwordController.text;
+
+      if (username == 'admin' && password == 'admin') {
+        Navigator.pushReplacementNamed(context, '/home');
+      } else {
+        _showMessage('Username atau password salah');
       }
 
-      // Redirect ke Home
-      Navigator.pushReplacementNamed(context, '/home');
-    } on FirebaseAuthException catch (e) {
-      String msg = "Terjadi kesalahan";
-      if (e.code == 'user-not-found') msg = 'Email tidak ditemukan';
-      if (e.code == 'wrong-password') msg = 'Password salah';
-      _showMessage(msg);
-    } finally {
       setState(() => _isLoading = false);
-    }
+    });
   }
 
   void _showMessage(String msg) {
@@ -70,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 24),
                 TextField(
-                  controller: _emailController,
+                  controller: _usernameController,
                   decoration: const InputDecoration(
                     labelText: 'Username',
                     prefixIcon: Icon(Icons.person),
@@ -91,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () {
-                      Navigator.pushNamed(context, '/forgot');
+                      _showMessage('Fitur lupa password tidak tersedia');
                     },
                     child: const Text("Lupa Password Anda?"),
                   ),
