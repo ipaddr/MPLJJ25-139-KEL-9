@@ -20,19 +20,19 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blue[50],
+      backgroundColor: const Color.fromARGB(255, 227, 242, 253),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset('assets/logo.png', height: 120),
+            Image.asset('assets/imagas/logo.png', height: 120),
             const SizedBox(height: 24),
             const Text(
               "SejahteraHub",
               style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue,
+                color: Color.fromARGB(255, 33, 150, 243),
               ),
             ),
             const SizedBox(height: 8),
