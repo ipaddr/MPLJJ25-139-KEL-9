@@ -92,7 +92,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: _login,
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size.fromHeight(45),
-                        backgroundColor: Colors.blue,
+                        backgroundColor: const Color.fromARGB(
+                          255,
+                          33,
+                          150,
+                          243,
+                        ),
                       ),
                       child: const Text(
                         "Masuk",
