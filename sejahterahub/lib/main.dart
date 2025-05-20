@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:sejahterahub/views/Edukasi_Page.dart';
-import 'package:sejahterahub/views/Profil_page.dart';
 import 'package:sejahterahub/views/splashscreen.dart';
 import 'package:sejahterahub/views/login_views.dart';
 import 'package:sejahterahub/views/register_views.dart';
 import 'package:sejahterahub/views/Homepage.dart';
+import 'package:sejahterahub/views/edukasi_page.dart';
+import 'package:sejahterahub/views/profil_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

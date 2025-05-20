@@ -1,7 +1,51 @@
 import 'package:flutter/material.dart';
+import 'edukasi_page.dart';
+import 'ForumPage.dart';
+import 'profil_page.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  int currentIndex = 0;
+
+  final List<Widget> _pages = const [
+    HomeContent(),
+    EdukasiPage(),
+    ForumPage(),
+    ProfilePage(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _pages[currentIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: currentIndex,
+        onTap: (index) {
+          setState(() {
+            currentIndex = index;
+          });
+        },
+        selectedItemColor: Colors.black,
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.school), label: 'Edukasi'),
+          BottomNavigationBarItem(icon: Icon(Icons.forum), label: 'Forum'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+        ],
+      ),
+    );
+  }
+}
+
+class HomeContent extends StatelessWidget {
+  const HomeContent({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -10,11 +54,10 @@ class HomePage extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha((0.8 * 255).round()), // opacity 80%
+                color: Colors.white.withAlpha((0.8 * 255).round()),
                 borderRadius: BorderRadius.circular(12),
               ),
               margin: const EdgeInsets.all(16),
@@ -39,28 +82,20 @@ class HomePage extends StatelessWidget {
                 ],
               ),
             ),
-
-            // Ilustrasi placeholder
             Container(
               height: 140,
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.3), // 30% opacity
+                color: Colors.white.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
-              
               alignment: Alignment.center,
               child: const Text(
                 "Community Welfare Illustration",
                 style: TextStyle(color: Colors.white),
               ),
             ),
-
-            
-
             const SizedBox(height: 12),
-
-            // Tombol aksi utama
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -72,10 +107,7 @@ class HomePage extends StatelessWidget {
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // Berita dan Pengumuman
             Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -106,22 +138,10 @@ class HomePage extends StatelessWidget {
           ],
         ),
       ),
-
-      // Bottom navigation
-      bottomNavigationBar: BottomNavigationBar(
-        selectedItemColor: Colors.black,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.school), label: 'Edukasi'),
-          BottomNavigationBarItem(icon: Icon(Icons.forum), label: 'Forum'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
-        ],
-      ),
     );
   }
 
-  Widget _menuButton(IconData icon, String label) {
+  static Widget _menuButton(IconData icon, String label) {
     return Column(
       children: [
         Container(
@@ -138,7 +158,7 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _newsCard(String title, String date) {
+  static Widget _newsCard(String title, String date) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFFE3F2FD),

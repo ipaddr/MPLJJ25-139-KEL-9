@@ -1,12 +1,5 @@
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: ProfilePage(),
-  ));
-}
-
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 
@@ -38,14 +31,14 @@ class ProfilePage extends StatelessWidget {
             ),
             const Text('NIK: 3275021504900002'),
             const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () {},
-              child: const Text('Edit Profil'),
-            ),
+            OutlinedButton(onPressed: () {}, child: const Text('Edit Profil')),
             const Divider(height: 32),
             const Align(
               alignment: Alignment.centerLeft,
-              child: Text('Data Diri', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(
+                'Data Diri',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
             const SizedBox(height: 8),
             Row(
@@ -79,16 +72,24 @@ class ProfilePage extends StatelessWidget {
             const Divider(height: 32),
             const Align(
               alignment: Alignment.centerLeft,
-              child: Text('Riwayat Pendaftaran', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(
+                'Riwayat Pendaftaran',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
             const SizedBox(height: 12),
             Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: ListTile(
                 title: const Text('Kartu Kesejahteraan'),
                 subtitle: const Text('Diajukan: 15 Mar 2025'),
                 trailing: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.orange[100],
                     borderRadius: BorderRadius.circular(16),
@@ -102,12 +103,17 @@ class ProfilePage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: ListTile(
                 title: const Text('Bantuan UMKM'),
                 subtitle: const Text('Diajukan: 02 Feb 2025'),
                 trailing: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.grey[300],
                     borderRadius: BorderRadius.circular(16),
