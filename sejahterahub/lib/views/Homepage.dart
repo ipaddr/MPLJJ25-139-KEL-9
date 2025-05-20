@@ -14,7 +14,7 @@ class HomePage extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.8),
+                color: Colors.white.withAlpha((0.8 * 255).round()), // opacity 80%
                 borderRadius: BorderRadius.circular(12),
               ),
               margin: const EdgeInsets.all(16),
@@ -45,15 +45,18 @@ class HomePage extends StatelessWidget {
               height: 140,
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withOpacity(0.3), // 30% opacity
                 borderRadius: BorderRadius.circular(12),
               ),
+              
               alignment: Alignment.center,
               child: const Text(
                 "Community Welfare Illustration",
                 style: TextStyle(color: Colors.white),
               ),
             ),
+
+            
 
             const SizedBox(height: 12),
 
