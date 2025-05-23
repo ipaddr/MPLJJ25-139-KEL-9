@@ -11,7 +11,7 @@ plugins {
 android {
     namespace = "com.example.sejahterahub"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion ="29.0.13113456"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -45,3 +45,4 @@ android {
 flutter {
     source = "../.."
 }
+   
