@@ -180,13 +180,11 @@ class AdminDashboardPage extends StatelessWidget {
               leading: const Icon(Icons.article),
               title: const Text('Kelola Artikel & Berita'),
               onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Navigasi ke halaman kelola artikel.'),
-                  ),
-                );
-                // TODO: Navigasi ke halaman kelola artikel (akan kita buat nanti)
+                Navigator.pop(context); // Tutup drawer
+                Navigator.pushNamed(
+                  context,
+                  '/admin/manage_articles',
+                ); // <-- Navigasi ke halaman kelola artikel
               },
             ),
             const Divider(),

@@ -1,8 +1,11 @@
-// lib/views/Homepage.dart
+// lib/views/homepage.dart
 import 'package:flutter/material.dart';
-import 'edukasi/edukasi_page.dart';
-import 'forum/forum_page.dart';
-import 'profil_page.dart';
+import 'package:sejahterahub/views/edukasi/edukasi_page.dart';
+import 'package:sejahterahub/views/forum/forum_page.dart';
+import 'package:sejahterahub/views/profil_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <-- Import ini
+import 'package:sejahterahub/models/edukasi_content.dart'; // <-- Import model ini
+import 'package:intl/intl.dart'; // Import untuk format tanggal, pastikan ada di pubspec.yaml
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -45,6 +48,9 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+// lib/views/homepage.dart
+// ... (imports dan kelas HomePage tetap sama)
+
 class HomeContent extends StatelessWidget {
   const HomeContent({super.key});
 
@@ -68,7 +74,6 @@ class HomeContent extends StatelessWidget {
     );
   }
 
-  // Modifikasi _newsCard untuk menggunakan Image.network
   static Widget _newsCard(String title, String date, String imageUrl) {
     return Container(
       decoration: BoxDecoration(
@@ -80,11 +85,9 @@ class HomeContent extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            // Ganti Center dengan Image.network
             height: 100,
             decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
-            clipBehavior:
-                Clip.antiAlias, // Penting agar gambar tidak keluar dari border radius
+            clipBehavior: Clip.antiAlias,
             child: Image.network(
               imageUrl,
               fit: BoxFit.cover,
@@ -144,14 +147,12 @@ class HomeContent extends StatelessWidget {
               height: 140,
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                // Warna background jika gambar tidak ada atau error
                 color: Colors.white.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
-              clipBehavior:
-                  Clip.antiAlias, // Penting agar gambar tidak keluar dari border radius
+              clipBehavior: Clip.antiAlias,
               child: Image.network(
-                'https://picsum.photos/seed/kesejahteraan/800/400', // URL ilustrasi
+                'https://picsum.photos/seed/kesejahteraan/800/400',
                 fit: BoxFit.cover,
                 width: double.infinity,
                 errorBuilder:
@@ -173,19 +174,14 @@ class HomeContent extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _menuButton(Icons.credit_card, "Daftar Kartu", () {
-                    Navigator.pushNamed(context, '/register');
+                  _menuButton(Icons.description, "Daftar Pengajuan", () {
+                    Navigator.pushNamed(context, '/submit_application');
                   }),
                   _menuButton(Icons.search, "Lacak Status", () {
-                    Navigator.pushNamed(context, '/track_status');
+                    Navigator.pushNamed(context, '/tracking');
                   }),
                   _menuButton(Icons.chat_bubble_outline, "Konsultasi", () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ForumPage(),
-                      ),
-                    );
+                    Navigator.pushNamed(context, '/chatbot');
                   }),
                 ],
               ),
@@ -201,7 +197,8 @@ class HomeContent extends StatelessWidget {
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                 ),
-                child: ListView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       "Berita & Pengumuman Terbaru",
@@ -211,23 +208,90 @@ class HomeContent extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // Panggil _newsCard dengan URL gambar
-                    _newsCard(
-                      "Program Bantuan UMKM 2025",
-                      "21 Apr 2025",
-                      'https://picsum.photos/seed/umkm/400/200', // URL gambar berita 1
-                    ),
-                    const SizedBox(height: 12),
-                    _newsCard(
-                      "Pendaftaran Kartu Prakerja",
-                      "20 Apr 2025",
-                      'https://picsum.photos/seed/prakerja/400/200', // URL gambar berita 2
-                    ),
-                    const SizedBox(height: 12),
-                    _newsCard(
-                      "Update Kebijakan Kesejahteraan Sosial",
-                      "19 Apr 2025",
-                      'https://picsum.photos/seed/kesejahteraan_berita/400/200', // URL gambar berita 3
+                    Expanded(
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream:
+                            FirebaseFirestore.instance
+                                .collection('articles')
+                                .orderBy('lastUpdated', descending: true)
+                                .snapshots(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          if (snapshot.hasError) {
+                            return Center(
+                              child: Text('Error: ${snapshot.error}'),
+                            );
+                          }
+                          if (!snapshot.hasData ||
+                              snapshot.data!.docs.isEmpty) {
+                            return const Center(
+                              child: Text('Tidak ada berita terbaru.'),
+                            );
+                          }
+
+                          return ListView.builder(
+                            itemCount: snapshot.data!.docs.length,
+                            itemBuilder: (context, index) {
+                              final doc = snapshot.data!.docs[index];
+                              // Pastikan Anda mendapatkan data map dari dokumen
+                              final data =
+                                  doc.data()
+                                      as Map<
+                                        String,
+                                        dynamic
+                                      >?; // <-- Lakukan cast ke Map<String, dynamic>?
+
+                              // Lakukan null-check pada 'data' sebelum mengaksesnya
+                              if (data == null) {
+                                return const SizedBox.shrink(); // Atau tampilkan placeholder error
+                              }
+
+                              final article = EdukasiContent(
+                                id: doc.id,
+                                type: data['type'] ?? 'Artikel',
+                                title: data['title'] ?? 'Tanpa Judul',
+                                duration: data['duration'] ?? 'N/A',
+                                views: data['views'] ?? '0 views',
+                                imageUrl: data['imageUrl'] ?? '',
+                                fullContent: data['fullContent'] ?? '',
+                                tags: List<String>.from(data['tags'] ?? []),
+                              );
+
+                              String date = 'N/A';
+                              // Gunakan data map yang sudah di-null-check
+                              if (data.containsKey('lastUpdated') &&
+                                  data['lastUpdated'] is Timestamp) {
+                                date = DateFormat(
+                                  'dd MMM yyyy', // Format tanggal yang lebih jelas
+                                ).format(
+                                  (data['lastUpdated'] as Timestamp).toDate(),
+                                );
+                              } else if (data.containsKey('createdAt') &&
+                                  data['createdAt'] is Timestamp) {
+                                date = DateFormat(
+                                  'dd MMM yyyy', // Format tanggal yang lebih jelas
+                                ).format(
+                                  (data['createdAt'] as Timestamp).toDate(),
+                                );
+                              }
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12.0),
+                                child: _newsCard(
+                                  article.title,
+                                  date,
+                                  article.imageUrl,
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
                     ),
                   ],
                 ),

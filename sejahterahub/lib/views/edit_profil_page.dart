@@ -1,5 +1,7 @@
-// lib/views/edit_profile_page.dart
+// lib/views/edit_profil_page.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class EditProfilePage extends StatefulWidget {
   final String initialName;
@@ -29,6 +31,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late TextEditingController _phoneController;
   late TextEditingController _addressController;
 
+  bool _isSaving = false;
+
   @override
   void initState() {
     super.initState();
@@ -49,21 +53,45 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.dispose();
   }
 
-  void _saveChanges() {
-    // Kumpulkan data yang sudah diedit
-    final Map<String, String> updatedData = {
-      'name': _nameController.text,
-      'nik': _nikController.text,
-      'email': _emailController.text,
-      'phone': _phoneController.text,
-      'address': _addressController.text,
-    };
+  Future<void> _saveChanges() async {
+    setState(() {
+      _isSaving = true; // Set saving true saat proses dimulai
+    });
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({
+              'nama': _nameController.text.trim(),
+              'nik': _nikController.text.trim(),
+              'email': _emailController.text.trim(),
+              'no_hp': _phoneController.text.trim(),
+              'address': _addressController.text.trim(),
+              // Jangan lupa field 'ttl' dan 'kk' jika ada
+            });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Perubahan disimpan (simulasi)!')),
-    );
-    // Kembali ke halaman sebelumnya dan kirim data yang diedit
-    Navigator.pop(context, updatedData);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Perubahan profil berhasil disimpan!')),
+        );
+        Navigator.pop(context); // Kembali ke halaman profil
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak ada pengguna yang login.')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal menyimpan perubahan: $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false; // Set saving false setelah proses selesai
+        });
+      }
+    }
   }
 
   @override
@@ -151,20 +179,23 @@ class _EditProfilePageState extends State<EditProfilePage> {
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _saveChanges,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Simpan Perubahan',
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-              ),
+              child:
+                  _isSaving
+                      ? const Center(child: CircularProgressIndicator())
+                      : ElevatedButton(
+                        onPressed: _saveChanges,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Simpan Perubahan',
+                          style: TextStyle(fontSize: 16, color: Colors.white),
+                        ),
+                      ),
             ),
           ],
         ),

@@ -8,6 +8,7 @@ class EdukasiContent {
   final String views;
   final String imageUrl; // URL gambar thumbnail
   final String fullContent; // Konten lengkap artikel/deskripsi video
+  final List<String> tags; // <-- TAMBAHKAN PROPERTI INI
 
   EdukasiContent({
     required this.id,
@@ -17,5 +18,6 @@ class EdukasiContent {
     required this.views,
     required this.imageUrl,
     required this.fullContent,
+    this.tags = const [], // <-- TAMBAHKAN PARAMETER INI DI CONSTRUCTOR
   });
 }
