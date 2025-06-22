@@ -1,7 +1,6 @@
+// lib/views/chatbot_page.dart
 import 'package:flutter/material.dart';
-import 'package:dialog_flowtter/dialog_flowtter.dart';
-import 'package:flutter/services.dart' show rootBundle;
-import 'dart:convert';
+import 'package:google_generative_ai/google_generative_ai.dart'; // <-- Import Gemini API// Digunakan untuk rootBundle, jika API Key dari assets
 
 class ChatbotPage extends StatefulWidget {
   const ChatbotPage({super.key});
@@ -11,88 +10,73 @@ class ChatbotPage extends StatefulWidget {
 }
 
 class _ChatbotPageState extends State<ChatbotPage> {
-  DialogFlowtter? dialogFlowtter;
+  // Ganti dengan API Key Gemini Anda dari Google AI Studio
+  // CATATAN PENTING: Jangan menyimpan API Key langsung di kode untuk aplikasi produksi yang akan dirilis!
+  // Pertimbangkan menggunakan variabel lingkungan, server backend, atau Firebase Functions.
+  final String _geminiApiKey =
+      "AIzaSyDmifNGDSAOBlLyCtKD_akxl73z_a88cas"; // <--- GANTI DENGAN API KEY ANDA
+
+  late final GenerativeModel _model; // Deklarasi model Gemini
   final TextEditingController _messageController = TextEditingController();
   List<Map<String, dynamic>> messages = [];
+  bool _isBotTyping = false; // Untuk indikator bot sedang membalas
 
   @override
   void initState() {
     super.initState();
-    _initializeDialogFlowtter();
-  }
-
-  Future<void> _initializeDialogFlowtter() async {
-    try {
-      // Membaca kredensial dari file assets
-      String jsonString = await rootBundle.loadString(
-        'assets/credentials/sejahterahub-e5c711aeaa68.json',
-      );
-      Map<String, dynamic> jsonCredentials = jsonDecode(jsonString);
-
-      DialogAuthCredentials credentials = DialogAuthCredentials.fromJson(
-        jsonCredentials,
-      );
-
-      dialogFlowtter = DialogFlowtter(
-        credentials: credentials,
-        sessionId: 'sejahtera_hub_user_session',
-      );
-    } catch (e) {
-      print('Error initializing DialogFlowtter: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menginisialisasi chatbot: $e')),
-      );
-    }
+    // Inisialisasi model Gemini di initState
+    _model = GenerativeModel(
+      model:
+          'gemini-1.5-flash', // Anda bisa mencoba 'gemini-pro-vision' jika ingin input gambar
+      apiKey: _geminiApiKey,
+    );
   }
 
   void _sendMessage(String text) async {
     if (text.isEmpty) return;
 
-    if (dialogFlowtter == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chatbot belum siap, coba sebentar lagi.'),
-        ),
-      );
-      return;
-    }
-
+    // Tambahkan pesan pengguna ke daftar
     setState(() {
       messages.add({'message': text, 'isUser': true});
       _messageController.clear();
+      _isBotTyping = true; // Set bot sedang mengetik
     });
 
     try {
-      final DetectIntentResponse response = await dialogFlowtter!.detectIntent(
-        queryInput: QueryInput(text: TextInput(text: text)),
-      );
+      // Buat konten untuk dikirim ke Gemini
+      final content = [Content.text(text)];
 
-      final String? responseText = response.message?.text?.text?.join(' ');
+      // Kirim pesan ke model Gemini
+      final response = await _model.generateContent(content);
+
+      // Ambil teks respons dari Gemini
+      final String? responseText = response.text;
 
       setState(() {
         messages.add({
           'message':
               responseText?.isNotEmpty == true
                   ? responseText!
-                  : 'Maaf, tidak ada respons dari bot.',
+                  : 'Maaf, saya tidak bisa memberikan respons saat ini.',
           'isUser': false,
         });
+        _isBotTyping = false; // Bot selesai mengetik
       });
     } catch (e) {
-      print('Error sending message: $e');
+      print('Error communicating with Gemini: $e');
       setState(() {
         messages.add({
           'message':
               'Terjadi kesalahan saat menghubungi bot. Mohon coba lagi nanti. ($e)',
           'isUser': false,
         });
+        _isBotTyping = false; // Bot selesai mengetik
       });
     }
   }
 
   @override
   void dispose() {
-    dialogFlowtter?.dispose();
     _messageController.dispose();
     super.dispose();
   }
@@ -109,8 +93,32 @@ class _ChatbotPageState extends State<ChatbotPage> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16.0),
-              itemCount: messages.length,
+              itemCount:
+                  messages.length +
+                  (_isBotTyping ? 1 : 0), // Tambah item untuk indikator typing
               itemBuilder: (context, index) {
+                if (_isBotTyping && index == messages.length) {
+                  return Align(
+                    // Indikator bot sedang mengetik
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 4.0),
+                      padding: const EdgeInsets.all(10.0),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                      child: const Text(
+                        'Bot sedang mengetik...',
+                        style: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
                 final message = messages[index];
                 final String messageText =
                     message['message'] is String

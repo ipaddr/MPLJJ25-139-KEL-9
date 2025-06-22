@@ -1,6 +1,8 @@
 // lib/views/create_discussion_page.dart
 import 'package:flutter/material.dart';
-import 'package:sejahterahub/models/forum_diskusi.dart'; // Import model diskusi
+import 'package:sejahterahub/models/forum_diskusi.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
+import 'package:firebase_auth/firebase_auth.dart'; // Import FirebaseAuth
 
 class CreateDiscussionPage extends StatefulWidget {
   const CreateDiscussionPage({super.key});
@@ -12,37 +14,75 @@ class CreateDiscussionPage extends StatefulWidget {
 class _CreateDiscussionPageState extends State<CreateDiscussionPage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
+  bool _isLoading = false; // State untuk loading
 
-  void _submitDiscussion() {
+  Future<void> _submitDiscussion() async {
     final String title = _titleController.text.trim();
-    // Isi konten diskusi dari _contentController.text, tapi tidak dikembalikan ke ForumPage untuk saat ini
-    // karena ForumCard tidak menampilkannya secara langsung. Ini akan penting nanti jika ada halaman detail diskusi.
+    final String content = _contentController.text.trim();
 
-    if (title.isEmpty) {
-      // Hanya validasi judul untuk demo ini
+    if (title.isEmpty || content.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Judul diskusi tidak boleh kosong.')),
+        const SnackBar(
+          content: Text('Judul dan isi diskusi tidak boleh kosong.'),
+        ),
       );
       return;
     }
 
-    // Buat objek ForumDiscussion baru
-    final newDiscussion = ForumDiscussion(
-      id: DateTime.now().millisecondsSinceEpoch.toString(), // ID unik sederhana
-      title: title,
-      author: 'Pengguna Baru', // Placeholder, nanti dari data user login
-      timeAgo: 'Baru saja', // Placeholder
-      tags: [], // Bisa ditambahkan fitur input tag nanti
-      comments: 0,
-      likes: 0,
-    );
+    final User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Anda harus login untuk membuat diskusi.'),
+        ),
+      );
+      return;
+    }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Diskusi "$title" berhasil dibuat (simulasi)!')),
-    );
+    setState(() {
+      _isLoading = true; // Set loading
+    });
 
-    // Kembali ke halaman forum dan kirim objek diskusi baru
-    Navigator.pop(context, newDiscussion);
+    try {
+      // Dapatkan nama pengguna dari FirebaseAuth atau Firestore (jika ada profil user)
+      // Untuk demo ini, kita gunakan displayName atau email, atau fallback ke UID
+      final String authorName =
+          currentUser.displayName ?? currentUser.email ?? currentUser.uid;
+
+      // Buat objek ForumDiscussion baru untuk dikirim ke Firestore
+      final newDiscussion = ForumDiscussion(
+        id: '', // ID akan di-generate oleh Firestore
+        title: title,
+        content: content,
+        authorId: currentUser.uid,
+        authorName: authorName,
+        createdAt: Timestamp.now(), // Gunakan Timestamp Firestore
+        likes: 0,
+        commentsCount: 0,
+        tags: [],
+      );
+
+      // Simpan diskusi ke koleksi 'discussions' di Firestore
+      await FirebaseFirestore.instance
+          .collection('discussions')
+          .add(newDiscussion.toFirestore());
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Diskusi "$title" berhasil dibuat!')),
+      );
+
+      // Kembali ke halaman forum (tidak perlu mengembalikan objek, karena data akan di-fetch dari Firestore)
+      Navigator.pop(context);
+    } catch (e) {
+      print('Error submitting discussion: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal membuat diskusi: $e')));
+    } finally {
+      setState(() {
+        _isLoading = false; // Selesai loading
+      });
+    }
   }
 
   @override
@@ -87,7 +127,10 @@ class _CreateDiscussionPageState extends State<CreateDiscussionPage> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _submitDiscussion,
+                onPressed:
+                    _isLoading
+                        ? null
+                        : _submitDiscussion, // Disable saat loading
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -95,10 +138,17 @@ class _CreateDiscussionPageState extends State<CreateDiscussionPage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(
-                  'Kirim Diskusi',
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
+                child:
+                    _isLoading
+                        ? const CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        )
+                        : const Text(
+                          'Kirim Diskusi',
+                          style: TextStyle(fontSize: 16, color: Colors.white),
+                        ),
               ),
             ),
           ],

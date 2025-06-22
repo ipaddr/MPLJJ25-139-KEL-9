@@ -1,7 +1,10 @@
 // lib/views/ForumPage.dart
 import 'package:flutter/material.dart';
 import 'package:sejahterahub/models/forum_diskusi.dart';
-import 'package:sejahterahub/views/forum/forum_diskusi_detail_page.dart'; // <-- Import halaman detail baru
+import 'package:sejahterahub/views/forum/create_diskusi_page.dart';
+import 'package:sejahterahub/views/forum/forum_diskusi_detail_page.dart'; // Import halaman buat diskusi
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
+import 'package:timeago/timeago.dart' as timeago; // Import timeago
 
 class ForumPage extends StatefulWidget {
   const ForumPage({super.key});
@@ -12,62 +15,43 @@ class ForumPage extends StatefulWidget {
 
 class _ForumPageState extends State<ForumPage> {
   final TextEditingController _searchController = TextEditingController();
-  List<ForumDiscussion> _allDiscussions = [];
-  List<ForumDiscussion> _filteredDiscussions = [];
+  // Tidak perlu _allDiscussions dan _filteredDiscussions lagi secara lokal,
+  // karena kita akan streaming langsung dari Firestore.
+
+  // Stream untuk mendapatkan daftar diskusi dari Firestore
+  Stream<List<ForumDiscussion>> _getDiscussionsStream() {
+    return FirebaseFirestore.instance
+        .collection('discussions')
+        .orderBy('createdAt', descending: true) // Urutkan dari yang terbaru
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) => ForumDiscussion.fromFirestore(doc))
+              .toList();
+        });
+  }
 
   @override
   void initState() {
     super.initState();
-    _allDiscussions = [
-      ForumDiscussion(
-        id: 'd1',
-        title: "Tips Mengembangkan UMKM di Era Digital",
-        author: "Budi Santoso",
-        timeAgo: "2 jam yang lalu",
-        tags: ["#UsahaKecil", "#TipsKeuangan"],
-        comments: 24,
-        likes: 56,
-      ),
-      ForumDiscussion(
-        id: 'd2',
-        title: "Info Bantuan BPUM 2025",
-        author: "Siti Aminah",
-        timeAgo: "5 jam yang lalu",
-        tags: ["#BantuanSosial"],
-        comments: 42,
-        likes: 89,
-      ),
-      ForumDiscussion(
-        id: 'd3',
-        title: "Bagaimana Cara Mengajukan KUR?",
-        author: "Joko Susilo",
-        timeAgo: "1 hari yang lalu",
-        tags: ["#UMKM", "#Pinjaman"],
-        comments: 15,
-        likes: 30,
-      ),
-    ];
-    _filteredDiscussions = _allDiscussions;
+    // Inisialisasi locale timeago ke bahasa Indonesia
+    timeago.setLocaleMessages('id', timeago.IdMessages());
   }
 
-  void _filterDiscussions(String query) {
-    setState(() {
-      _filteredDiscussions =
-          _allDiscussions.where((discussion) {
-            return discussion.title.toLowerCase().contains(
-                  query.toLowerCase(),
-                ) ||
-                discussion.author.toLowerCase().contains(query.toLowerCase());
-          }).toList();
-    });
-  }
-
-  void _addDiscussion(ForumDiscussion newDiscussion) {
-    setState(() {
-      _allDiscussions.insert(0, newDiscussion);
-      _filteredDiscussions = _allDiscussions;
-      _searchController.clear();
-    });
+  // Fungsi filter akan bekerja pada data yang sudah di-fetch
+  // Jika ingin real-time search langsung di Firestore, akan butuh indeks dan query yang lebih kompleks.
+  // Untuk saat ini, kita akan memfilter di sisi klien setelah data di-fetch.
+  List<ForumDiscussion> _filterDiscussionsLocally(
+    List<ForumDiscussion> allDiscussions,
+    String query,
+  ) {
+    if (query.isEmpty) {
+      return allDiscussions;
+    }
+    return allDiscussions.where((discussion) {
+      return discussion.title.toLowerCase().contains(query.toLowerCase()) ||
+          discussion.authorName.toLowerCase().contains(query.toLowerCase());
+    }).toList();
   }
 
   @override
@@ -93,7 +77,12 @@ class _ForumPageState extends State<ForumPage> {
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    onChanged: _filterDiscussions,
+                    onChanged: (query) {
+                      setState(() {
+                        // Memicu rebuild untuk memfilter tampilan
+                        // Data utama tetap di stream builder
+                      });
+                    },
                     decoration: InputDecoration(
                       hintText: 'Cari topik diskusi...',
                       prefixIcon: const Icon(Icons.search),
@@ -108,7 +97,7 @@ class _ForumPageState extends State<ForumPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Icon(Icons.notifications_none),
+                const Icon(Icons.notifications_none), // Ini masih placeholder
               ],
             ),
 
@@ -128,31 +117,59 @@ class _ForumPageState extends State<ForumPage> {
                 icon: const Icon(Icons.add),
                 label: const Text("Buat Diskusi Baru"),
                 onPressed: () async {
-                  final newDiscussionData = await Navigator.pushNamed(
+                  await Navigator.push(
                     context,
-                    '/create_discussion',
+                    MaterialPageRoute(
+                      builder: (context) => const CreateDiscussionPage(),
+                    ),
                   );
-                  if (newDiscussionData != null &&
-                      newDiscussionData is ForumDiscussion) {
-                    _addDiscussion(newDiscussionData);
-                  }
+                  // Tidak perlu _addDiscussion lagi karena StreamBuilder akan otomatis update
                 },
               ),
             ),
 
             const SizedBox(height: 16),
 
-            // List diskusi
+            // List diskusi dari Firestore
             Expanded(
-              child: ListView.builder(
-                itemCount: _filteredDiscussions.length,
-                itemBuilder: (context, index) {
-                  final discussion = _filteredDiscussions[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12.0),
-                    child: ForumCard(
-                      discussion: discussion, // <-- Teruskan objek discussion
-                    ),
+              child: StreamBuilder<List<ForumDiscussion>>(
+                stream: _getDiscussionsStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error: ${snapshot.error}'));
+                  }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(
+                      child: Text('Belum ada diskusi. Mulai yang pertama!'),
+                    );
+                  }
+
+                  // Lakukan filtering lokal setelah data di-fetch
+                  final filteredDiscussions = _filterDiscussionsLocally(
+                    snapshot.data!,
+                    _searchController.text,
+                  );
+
+                  if (filteredDiscussions.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Tidak ada diskusi yang cocok dengan pencarian Anda.',
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    itemCount: filteredDiscussions.length,
+                    itemBuilder: (context, index) {
+                      final discussion = filteredDiscussions[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: ForumCard(discussion: discussion),
+                      );
+                    },
                   );
                 },
               ),
@@ -165,15 +182,18 @@ class _ForumPageState extends State<ForumPage> {
 }
 
 class ForumCard extends StatelessWidget {
-  final ForumDiscussion discussion; // Sekarang menerima objek model
+  final ForumDiscussion discussion;
 
-  const ForumCard({
-    super.key,
-    required this.discussion, // Perbarui constructor
-  });
+  const ForumCard({super.key, required this.discussion});
 
   @override
   Widget build(BuildContext context) {
+    // Format waktu menggunakan timeago
+    final String timeAgoText = timeago.format(
+      discussion.createdAt.toDate(),
+      locale: 'id',
+    );
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -181,7 +201,6 @@ class ForumCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: InkWell(
-        // <-- Tambahkan InkWell untuk aksi tap
         onTap: () {
           Navigator.push(
             context,
@@ -195,24 +214,24 @@ class ForumCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Judul dan Avatar
+            // Judul dan Penulis
             Row(
               children: [
-                Icon(discussion.avatar, size: 40), // Gunakan data dari model
+                Icon(discussion.avatar, size: 40),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        discussion.title, // Gunakan data dari model
+                        discussion.title,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
                       ),
                       Text(
-                        "${discussion.author} • ${discussion.timeAgo}", // Gunakan data dari model
+                        "${discussion.authorName} • $timeAgoText", // Gunakan authorName dan timeAgo
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.grey,
@@ -229,8 +248,7 @@ class ForumCard extends StatelessWidget {
             Wrap(
               spacing: 8,
               children:
-                  discussion
-                      .tags // Gunakan data dari model
+                  discussion.tags
                       .map(
                         (tag) => Chip(
                           label: Text(tag),
@@ -247,11 +265,11 @@ class ForumCard extends StatelessWidget {
               children: [
                 const Icon(Icons.comment, size: 16, color: Colors.grey),
                 const SizedBox(width: 4),
-                Text('${discussion.comments}'), // Gunakan data dari model
+                Text('${discussion.commentsCount}'), // Gunakan commentsCount
                 const SizedBox(width: 16),
                 const Icon(Icons.favorite_border, size: 16, color: Colors.grey),
                 const SizedBox(width: 4),
-                Text('${discussion.likes}'), // Gunakan data dari model
+                Text('${discussion.likes}'),
               ],
             ),
           ],

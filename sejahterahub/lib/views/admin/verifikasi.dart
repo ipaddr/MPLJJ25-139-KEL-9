@@ -1,29 +1,36 @@
+// lib/views/admin/verification_page.dart
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-// Model data dummy untuk pengajuan yang perlu diverifikasi
+// Model data untuk pengajuan (tetap sama)
 class PendingSubmission {
   final String id;
   final String name;
   final String nik;
   final String cardType;
-  final String status; // Misalnya 'Menunggu'
-
-  // Data detail untuk modal
+  final String status;
   final String address;
   final String? ktpDocUrl;
   final String? kkDocUrl;
-  final String? businessDocUrl; // Untuk Bukti Usaha
+  final String? businessDocUrl;
+  final DateTime submissionDate;
+  final String userId;
 
   PendingSubmission({
     required this.id,
     required this.name,
     required this.nik,
     required this.cardType,
-    this.status = 'Menunggu',
+    required this.status,
     required this.address,
     this.ktpDocUrl,
     this.kkDocUrl,
     this.businessDocUrl,
+    required this.submissionDate,
+    required this.userId,
   });
 }
 
@@ -38,86 +45,182 @@ class _VerificationPageState extends State<VerificationPage> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedCategory = 'Semua';
 
-  List<PendingSubmission> _allSubmissions = [
-    // Data dummy pengajuan
-    PendingSubmission(
-      id: 'app001',
-      name: 'Budi Santoso',
-      nik: '3173082504890002',
-      cardType: 'Kartu Kesejahteraan',
-      address: 'Jl. Merdeka No. 123, Jakarta',
-      ktpDocUrl: 'ktp_budi.pdf',
-      kkDocUrl: 'kk_budi.pdf',
-    ),
-    PendingSubmission(
-      id: 'app002',
-      name: 'Siti Aminah',
-      nik: '3173082612910001',
-      cardType: 'Kartu Usaha',
-      address: 'Jl. Pemuda No. 45, Bandung',
-      ktpDocUrl: 'ktp_siti.pdf',
-      kkDocUrl: 'kk_siti.pdf',
-      businessDocUrl: 'bukti_usaha_siti.pdf',
-    ),
-    PendingSubmission(
-      id: 'app003',
-      name: 'Joko Widodo',
-      nik: '3173081001700003',
-      cardType: 'Kartu Kesejahteraan',
-      address: 'Jl. Sudirman No. 78, Surabaya',
-      ktpDocUrl: 'ktp_joko.pdf',
-      kkDocUrl: 'kk_joko.pdf',
-    ),
-  ];
-
-  List<PendingSubmission> _filteredSubmissions = [];
-
   @override
   void initState() {
     super.initState();
-    _filteredSubmissions = _allSubmissions;
-  }
-
-  void _filterSubmissions(String query) {
-    setState(() {
-      _filteredSubmissions =
-          _allSubmissions.where((submission) {
-            final lowerQuery = query.toLowerCase();
-            final nameMatches = submission.name.toLowerCase().contains(
-              lowerQuery,
-            );
-            final nikMatches = submission.nik.toLowerCase().contains(
-              lowerQuery,
-            );
-            return nameMatches || nikMatches;
-          }).toList();
-      _applyCategoryFilter(); // Terapkan filter kategori setelah pencarian
+    _searchController.addListener(() {
+      setState(() {});
     });
   }
 
-  void _applyCategoryFilter() {
-    setState(() {
-      if (_selectedCategory == 'Semua') {
-        // Jika semua dipilih, filteredSubmissions sudah hasil pencarian
-      } else {
-        _filteredSubmissions =
-            _filteredSubmissions.where((submission) {
-              if (_selectedCategory == 'Kesejahteraan') {
-                return submission.cardType.contains('Kesejahteraan');
-              } else if (_selectedCategory == 'Usaha') {
-                return submission.cardType.contains('Usaha');
+  // --- START: FIREBASE DATA FETCHING & MANIPULATION ---
+
+  Stream<List<PendingSubmission>> _getSubmissionsStream() {
+    return FirebaseFirestore.instance
+        .collection('submissions')
+        .orderBy('submissionDate', descending: true)
+        .snapshots()
+        .asyncMap((snapshot) async {
+          List<PendingSubmission> submissions = [];
+          for (var doc in snapshot.docs) {
+            final data = doc.data(); // Pastikan data ada di sini
+
+            String userName = 'User Tidak Ditemukan';
+            String userAddress = data['address'] ?? 'Alamat Tidak Tersedia';
+            String currentUserId =
+                data['userId'] ??
+                ''; // Ambil userId dari data, default string kosong jika null
+
+            // PERBAIKAN DI SINI: Lakukan pengecekan userId sebelum mencoba fetch userDoc
+            if (currentUserId.isNotEmpty) {
+              // Hanya fetch jika userId tidak kosong
+              final userDoc =
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(currentUserId)
+                      .get();
+              if (userDoc.exists && userDoc.data() != null) {
+                userName = userDoc.data()!['nama'] ?? 'Nama Tidak Tersedia';
+              } else {
+                // Fallback: Jika dokumen user tidak ditemukan, ambil nama dari submission jika ada
+                userName =
+                    data['name'] ??
+                    'User Tidak Ditemukan'; // Asumsi 'name' mungkin ada langsung di submission
               }
-              return false;
-            }).toList();
-      }
-    });
+            } else {
+              // Jika userId kosong, gunakan nama dari data submission jika ada
+              userName = data['name'] ?? 'User Tidak Ditemukan (UID kosong)';
+            }
+
+            submissions.add(
+              PendingSubmission(
+                id: doc.id,
+                name: userName,
+                nik: data['nik'] ?? 'N/A',
+                cardType: data['cardType'] ?? 'N/A',
+                status: data['status'] ?? 'Menunggu Verifikasi',
+                address: userAddress,
+                ktpDocUrl: data['ktpDocUrl'],
+                kkDocUrl: data['kkDocUrl'],
+                businessDocUrl: data['businessDocUrl'],
+                submissionDate: (data['submissionDate'] as Timestamp).toDate(),
+                userId:
+                    currentUserId, // Gunakan userId yang sudah di-null-check
+              ),
+            );
+          }
+          return submissions;
+        });
+  }
+
+  Future<void> _updateSubmissionStatus(
+    String submissionId,
+    String status, {
+    String? notes,
+  }) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('submissions')
+          .doc(submissionId)
+          .update({
+            'status': status,
+            'notes': notes,
+            'approvalDate': FieldValue.serverTimestamp(),
+            'adminId': FirebaseAuth.instance.currentUser?.uid,
+          });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Pengajuan berhasil diupdate menjadi: $status')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal mengupdate status: $e')));
+    }
+  }
+
+  // --- END: FIREBASE DATA FETCHING & MANIPULATION ---
+
+  // --- START: HELPER METHODS FOR UI ---
+
+  Future<void> _launchUrl(String url) async {
+    final Uri uri = Uri.parse(url);
+    if (!await launchUrl(uri)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Tidak dapat membuka link: $url')));
+    }
+  }
+
+  Future<String?> _showNotesDialog(BuildContext context, String title) async {
+    final TextEditingController notesController = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: notesController,
+            decoration: const InputDecoration(
+              hintText:
+                  'Masukkan catatan (misal: Alasan penolakan, dokumen yang perlu direvisi)',
+            ),
+            maxLines: 3,
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, notesController.text),
+              child: const Text('Kirim'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDocumentButton(String fileName, String url) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8.0),
+      child: OutlinedButton.icon(
+        onPressed: () => _launchUrl(url),
+        icon: const Icon(Icons.file_copy),
+        label: Text(fileName),
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          side: const BorderSide(color: Colors.grey),
+        ),
+      ),
+    );
   }
 
   void _showDetailModal(PendingSubmission submission) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled:
-          true, // Agar modal bisa scroll kalau kontennya panjang
+      isScrollControlled: true,
       builder: (BuildContext context) {
         return Container(
           padding: EdgeInsets.only(
@@ -156,17 +259,26 @@ class _VerificationPageState extends State<VerificationPage> {
                 _buildDetailRow('Nama', submission.name),
                 _buildDetailRow('NIK', submission.nik),
                 _buildDetailRow('Alamat', submission.address),
+                _buildDetailRow('Jenis Kartu', submission.cardType),
+                _buildDetailRow(
+                  'Tgl Pengajuan',
+                  DateFormat('dd MMM, HH:mm').format(submission.submissionDate),
+                ),
+                _buildDetailRow('Status Saat Ini', submission.status),
                 const SizedBox(height: 16),
                 const Text(
                   'Dokumen',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                if (submission.ktpDocUrl != null)
+                if (submission.ktpDocUrl != null &&
+                    submission.ktpDocUrl!.isNotEmpty)
                   _buildDocumentButton('KTP.pdf', submission.ktpDocUrl!),
-                if (submission.kkDocUrl != null)
+                if (submission.kkDocUrl != null &&
+                    submission.kkDocUrl!.isNotEmpty)
                   _buildDocumentButton('KK.pdf', submission.kkDocUrl!),
-                if (submission.businessDocUrl != null)
+                if (submission.businessDocUrl != null &&
+                    submission.businessDocUrl!.isNotEmpty)
                   _buildDocumentButton(
                     'Bukti_Usaha.pdf',
                     submission.businessDocUrl!,
@@ -177,19 +289,15 @@ class _VerificationPageState extends State<VerificationPage> {
                   children: [
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Mengajukan ${submission.name} disetujui!',
-                              ),
-                            ),
+                        onPressed: () async {
+                          await _updateSubmissionStatus(
+                            submission.id,
+                            'Disetujui',
                           );
-                          Navigator.pop(context); // Tutup modal
-                          // TODO: Logika untuk memperbarui status di Firestore
+                          Navigator.pop(context);
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green, // Warna Setujui
+                          backgroundColor: Colors.green,
                           foregroundColor: Colors.white,
                         ),
                         child: const Text('Setujui'),
@@ -198,19 +306,22 @@ class _VerificationPageState extends State<VerificationPage> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Mengajukan ${submission.name} ditolak!',
-                              ),
-                            ),
+                        onPressed: () async {
+                          final String? notes = await _showNotesDialog(
+                            context,
+                            'Tolak Pengajuan',
                           );
-                          Navigator.pop(context); // Tutup modal
-                          // TODO: Logika untuk memperbarui status di Firestore
+                          if (notes != null) {
+                            await _updateSubmissionStatus(
+                              submission.id,
+                              'Ditolak',
+                              notes: notes,
+                            );
+                            Navigator.pop(context);
+                          }
                         },
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red, // Warna Tolak
+                          foregroundColor: Colors.red,
                           side: const BorderSide(color: Colors.red),
                         ),
                         child: const Text('Tolak'),
@@ -219,24 +330,26 @@ class _VerificationPageState extends State<VerificationPage> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Meminta revisi untuk ${submission.name}!',
-                              ),
-                            ),
+                        onPressed: () async {
+                          final String? notes = await _showNotesDialog(
+                            context,
+                            'Minta Revisi',
                           );
-                          Navigator.pop(context); // Tutup modal
-                          // TODO: Logika untuk memperbarui status di Firestore
-                          // Mungkin ada form untuk catatan revisi
+                          if (notes != null) {
+                            await _updateSubmissionStatus(
+                              submission.id,
+                              'Minta Revisi',
+                              notes: notes,
+                            );
+                            Navigator.pop(context);
+                          }
                         },
-                        child: const Text('Minta Revisi'), // Warna default
+                        child: const Text('Minta Revisi'),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20), // Padding bawah untuk keyboard
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -245,46 +358,62 @@ class _VerificationPageState extends State<VerificationPage> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 70, // Lebar tetap untuk label
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
+  // Helper untuk mendapatkan warna background status
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Menunggu Verifikasi':
+        return Colors.orange[100]!;
+      case 'Sedang Diproses':
+        return Colors.blue[100]!;
+      case 'Disetujui':
+        return Colors.green[100]!;
+      case 'Ditolak':
+        return Colors.red[100]!;
+      case 'Minta Revisi':
+        return Colors.purple[100]!;
+      default:
+        return Colors.grey[100]!;
+    }
   }
 
-  Widget _buildDocumentButton(String fileName, String url) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8.0),
-      child: OutlinedButton.icon(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Mengunduh dokumen: $fileName (simulasi)')),
-          );
-          // TODO: Implementasi unduh file dari Firebase Storage
-        },
-        icon: const Icon(Icons.file_copy),
-        label: Text(fileName),
-        style: OutlinedButton.styleFrom(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          side: const BorderSide(color: Colors.grey),
-        ),
+  // Helper untuk mendapatkan warna teks status
+  Color _getStatusTextColor(String status) {
+    switch (status) {
+      case 'Menunggu Verifikasi':
+        return Colors.orange;
+      case 'Sedang Diproses':
+        return Colors.blue;
+      case 'Disetujui':
+        return Colors.green;
+      case 'Ditolak':
+        return Colors.red;
+      case 'Minta Revisi':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  // Widget _buildCategoryChip (INI METODE YANG ERROR SEBELUMNYA, DIPASTIKAN ADA DI SINI)
+  Widget _buildCategoryChip(String label) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: _selectedCategory == label,
+      onSelected: (selected) {
+        setState(() {
+          _selectedCategory = label;
+        }); // Memicu rebuild StreamBuilder untuk filter
+      },
+      selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
+      labelStyle: TextStyle(
+        color:
+            _selectedCategory == label
+                ? Theme.of(context).primaryColor
+                : Colors.black,
       ),
     );
   }
+  // --- END: HELPER METHODS FOR UI ---
 
   @override
   Widget build(BuildContext context) {
@@ -299,7 +428,7 @@ class _VerificationPageState extends State<VerificationPage> {
                 TextField(
                   controller: _searchController,
                   onChanged: (query) {
-                    _filterSubmissions(query);
+                    setState(() {});
                   },
                   decoration: InputDecoration(
                     hintText: 'Cari nama atau NIK...',
@@ -314,108 +443,129 @@ class _VerificationPageState extends State<VerificationPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _buildCategoryChip('Semua'),
-                    _buildCategoryChip('Kesejahteraan'),
-                    _buildCategoryChip('Usaha'),
+                    _buildCategoryChip('Menunggu Verifikasi'),
+                    _buildCategoryChip('Disetujui'),
+                    _buildCategoryChip('Ditolak'),
+                    _buildCategoryChip('Minta Revisi'),
                   ],
                 ),
               ],
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              itemCount: _filteredSubmissions.length,
-              itemBuilder: (context, index) {
-                final submission = _filteredSubmissions[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12.0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 2,
-                  child: InkWell(
-                    onTap:
-                        () => _showDetailModal(
-                          submission,
-                        ), // Tampilkan modal detail
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: StreamBuilder<List<PendingSubmission>>(
+              stream: _getSubmissionsStream(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(
+                    child: Text('Tidak ada pengajuan ditemukan.'),
+                  );
+                }
+
+                List<PendingSubmission> allSubmissions = snapshot.data!;
+                List<PendingSubmission> filteredSubmissions =
+                    allSubmissions.where((submission) {
+                      final lowerQuery = _searchController.text.toLowerCase();
+                      final nameMatches = submission.name
+                          .toLowerCase()
+                          .contains(lowerQuery);
+                      final nikMatches = submission.nik.toLowerCase().contains(
+                        lowerQuery,
+                      );
+
+                      bool categoryFilterMatches = true;
+                      if (_selectedCategory != 'Semua') {
+                        categoryFilterMatches =
+                            submission.status.toLowerCase() ==
+                            _selectedCategory.toLowerCase();
+                      }
+
+                      return (nameMatches || nikMatches) &&
+                          categoryFilterMatches;
+                    }).toList();
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  itemCount: filteredSubmissions.length,
+                  itemBuilder: (context, index) {
+                    final submission = filteredSubmissions[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12.0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                      child: InkWell(
+                        onTap: () => _showDetailModal(submission),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                submission.name,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange[100],
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: const Text(
-                                  'Menunggu',
-                                  style: TextStyle(
-                                    color: Colors.orange,
-                                    fontWeight: FontWeight.bold,
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    submission.name,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _getStatusColor(submission.status),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      submission.status,
+                                      style: TextStyle(
+                                        color: _getStatusTextColor(
+                                          submission.status,
+                                        ),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'NIK: ${submission.nik}',
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                              const SizedBox(height: 8),
+                              Text('Kartu ${submission.cardType}'),
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: () => _showDetailModal(submission),
+                                  child: const Text('Lihat Detail'),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'NIK: ${submission.nik}',
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                          const SizedBox(height: 8),
-                          Text('Kartu ${submission.cardType}'),
-                          const SizedBox(height: 8),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: () => _showDetailModal(submission),
-                              child: const Text('Lihat Detail'),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 );
               },
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryChip(String label) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: _selectedCategory == label,
-      onSelected: (selected) {
-        setState(() {
-          _selectedCategory = label;
-          _filterSubmissions(_searchController.text); // Terapkan filter ulang
-        });
-      },
-      selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
-      labelStyle: TextStyle(
-        color:
-            _selectedCategory == label
-                ? Theme.of(context).primaryColor
-                : Colors.black,
       ),
     );
   }

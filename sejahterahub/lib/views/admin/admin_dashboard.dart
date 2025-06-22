@@ -1,9 +1,80 @@
 // lib/views/admin/admin_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
+import 'package:sejahterahub/views/admin/admin_notifications_page.dart';
+// Import for date formatting
 
-class AdminDashboardPage extends StatelessWidget {
+class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
+
+  @override
+  State<AdminDashboardPage> createState() => _AdminDashboardPageState();
+}
+
+class _AdminDashboardPageState extends State<AdminDashboardPage> {
+  // Untuk menghitung total pengguna (jika ada koleksi 'users')
+  Stream<int> _getTotalUsers() {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .snapshots()
+        .map((snapshot) => snapshot.size);
+  }
+
+  // Untuk menghitung pengajuan hari ini
+  Stream<int> _getTodaySubmissionsCount() {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+    return FirebaseFirestore.instance
+        .collection('submissions')
+        .where('submissionDate', isGreaterThanOrEqualTo: startOfDay)
+        .where(
+          'submissionDate',
+          isLessThanOrEqualTo: endOfDay,
+        ) // Use isLessThanOrEqualTo for end of day
+        .snapshots()
+        .map((snapshot) => snapshot.size);
+  }
+
+  // Untuk menghitung pengajuan yang menunggu verifikasi hari ini
+  Stream<int> _getPendingSubmissionsTodayCount() {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+    return FirebaseFirestore.instance
+        .collection('submissions')
+        .where('status', isEqualTo: 'Menunggu Verifikasi')
+        .where('submissionDate', isGreaterThanOrEqualTo: startOfDay)
+        .where('submissionDate', isLessThanOrEqualTo: endOfDay)
+        .snapshots()
+        .map((snapshot) => snapshot.size);
+  }
+
+  // Untuk menghitung kartu yang disetujui (total)
+  Stream<int> _getApprovedCardsCount() {
+    return FirebaseFirestore.instance
+        .collection('submissions')
+        .where('status', isEqualTo: 'Disetujui')
+        .snapshots()
+        .map((snapshot) => snapshot.size);
+  }
+
+  // Untuk menghitung pengaduan aktif (asumsi ada koleksi 'complaints' dengan status 'active')
+  Stream<int> _getActiveComplaintsCount() {
+    // Anda perlu memiliki koleksi 'complaints' di Firestore untuk ini
+    // Dan field 'status' di dalamnya (misalnya 'active', 'resolved')
+    return FirebaseFirestore.instance
+        .collection('complaints') // <--- Ganti dengan nama koleksi pengaduanmu
+        .where(
+          'status',
+          isEqualTo: 'active',
+        ) // <--- Ganti dengan status yang sesuai
+        .snapshots()
+        .map((snapshot) => snapshot.size);
+  }
 
   Future<void> _logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
@@ -17,6 +88,7 @@ class AdminDashboardPage extends StatelessWidget {
     required String subtitle,
     required IconData icon,
     Color iconColor = Colors.black,
+    bool isLoading = false, // Tambah parameter isLoading
   }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -35,13 +107,15 @@ class AdminDashboardPage extends StatelessWidget {
                     style: const TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  isLoading
+                      ? const CircularProgressIndicator() // Tampilkan loading
+                      : Text(
+                        value,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
@@ -51,52 +125,6 @@ class AdminDashboardPage extends StatelessWidget {
               ),
             ),
             Icon(icon, size: 40, color: iconColor),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Widget untuk notifikasi sistem
-  Widget _buildNotificationCard({
-    required String title,
-    required String subtitle,
-    required String timeAgo,
-    required IconData icon,
-    Color iconColor = Colors.black,
-  }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 24, color: iconColor),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(fontSize: 13)),
-                  const SizedBox(height: 4),
-                  Text(
-                    timeAgo,
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -120,11 +148,15 @@ class AdminDashboardPage extends StatelessWidget {
           },
         ),
         actions: [
+          // Ikon notifikasi yang sekarang navigasi ke halaman notifikasi
           IconButton(
             icon: const Icon(Icons.notifications_none),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Notifikasi admin.')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AdminNotificationsPage(),
+                ),
               );
             },
           ),
@@ -201,63 +233,84 @@ class AdminDashboardPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildStatCard(
-              title: 'Total Pengguna',
-              value: '24,512',
-              subtitle: '+12% dari bulan lalu',
-              icon: Icons.people,
-              iconColor: Colors.blue,
+            // Statistik Total Pengguna
+            StreamBuilder<int>(
+              stream: _getTotalUsers(),
+              builder: (context, snapshot) {
+                return _buildStatCard(
+                  title: 'Total Pengguna',
+                  value: snapshot.hasData ? '${snapshot.data}' : '...',
+                  subtitle: 'Data dari koleksi users',
+                  icon: Icons.people,
+                  iconColor: Colors.blue,
+                  isLoading: !snapshot.hasData,
+                );
+              },
             ),
-            _buildStatCard(
-              title: 'Pengajuan Hari Ini',
-              value: '156',
-              subtitle: '32 menunggu verifikasi',
-              icon: Icons.description,
-              iconColor: Colors.orange,
+            // Statistik Pengajuan Hari Ini
+            StreamBuilder<int>(
+              stream: _getTodaySubmissionsCount(),
+              builder: (context, snapshotToday) {
+                return StreamBuilder<int>(
+                  stream: _getPendingSubmissionsTodayCount(),
+                  builder: (context, snapshotPending) {
+                    return _buildStatCard(
+                      title: 'Pengajuan Hari Ini',
+                      value:
+                          snapshotToday.hasData
+                              ? '${snapshotToday.data}'
+                              : '...',
+                      subtitle:
+                          snapshotPending.hasData
+                              ? '${snapshotPending.data} menunggu verifikasi'
+                              : '...',
+                      icon: Icons.description,
+                      iconColor: Colors.orange,
+                      isLoading:
+                          !snapshotToday.hasData || !snapshotPending.hasData,
+                    );
+                  },
+                );
+              },
             ),
-            _buildStatCard(
-              title: 'Kartu Disetujui',
-              value: '1,248',
-              subtitle: 'Bulan April 2025',
-              icon: Icons.check_circle,
-              iconColor: Colors.green,
+            // Statistik Kartu Disetujui
+            StreamBuilder<int>(
+              stream: _getApprovedCardsCount(),
+              builder: (context, snapshot) {
+                return _buildStatCard(
+                  title: 'Kartu Disetujui',
+                  value: snapshot.hasData ? '${snapshot.data}' : '...',
+                  subtitle:
+                      'Total sepanjang waktu', // Sesuaikan subtitle jika ingin filter bulan/tahun
+                  icon: Icons.check_circle,
+                  iconColor: Colors.green,
+                  isLoading: !snapshot.hasData,
+                );
+              },
             ),
-            _buildStatCard(
-              title: 'Pengaduan Aktif',
-              value: '24',
-              subtitle: '8 perlu tindakan segera',
-              icon: Icons.warning,
-              iconColor: Colors.red,
+            // Statistik Pengaduan Aktif
+            StreamBuilder<int>(
+              stream: _getActiveComplaintsCount(),
+              builder: (context, snapshot) {
+                return _buildStatCard(
+                  title: 'Pengaduan Aktif',
+                  value: snapshot.hasData ? '${snapshot.data}' : '...',
+                  subtitle: 'Perlu tindakan segera',
+                  icon: Icons.warning,
+                  iconColor: Colors.red,
+                  isLoading: !snapshot.hasData,
+                );
+              },
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Notifikasi Sistem Terbaru',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            _buildNotificationCard(
-              title: 'Pembaruan Sistem',
-              subtitle:
-                  'Pembaruan sistem akan dilakukan pada 25 April 2025 pukul 02:00 WIB',
-              timeAgo: '2 jam yang lalu',
-              icon: Icons.info,
-              iconColor: Colors.blueAccent,
-            ),
-            _buildNotificationCard(
-              title: 'Peringatan Keamanan',
-              subtitle:
-                  'Terdeteksi 3 percobaan login tidak valid dari IP 192.168.1.1',
-              timeAgo: '5 jam yang lalu',
-              icon: Icons.security,
-              iconColor: Colors.orangeAccent,
-            ),
-            _buildNotificationCard(
-              title: 'Laporan Mingguan',
-              subtitle: 'Laporan mingguan telah tersedia untuk diunduh',
-              timeAgo: '1 hari yang lalu',
-              icon: Icons.assignment,
-              iconColor: Colors.greenAccent,
-            ),
+            // Bagian notifikasi sistem yang dipindahkan ke halaman terpisah
+            // Jadi, bagian ini tidak perlu ada lagi di sini
+            // const Text(
+            //   'Notifikasi Sistem Terbaru',
+            //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            // ),
+            // const SizedBox(height: 10),
+            // _buildNotificationCard(...),
           ],
         ),
       ),
